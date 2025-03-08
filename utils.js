@@ -67,9 +67,6 @@ class SwingUtils {
      * @property {Function} updatePanelColor - Method to update panel background color.
      */
 
-    // Store all created windows for management
-
-
     /**
      * Creates a new overlay window with customizable options
      * 
@@ -989,8 +986,9 @@ class SwingUtils {
     }
 }
 
+// Store all created windows for management
 SwingUtils.windows = {};
-
+// Color Schemes
 SwingUtils.ColorSchemes = {
     DARK: {
         background: new Color(30, 30, 30, 180),
