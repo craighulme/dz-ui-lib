@@ -36,9 +36,39 @@ const KeyAdapter = Java.type("java.awt.event.KeyAdapter");
 
 class SwingUtils {
     /**
-     * Store all created windows for management
-     * @private
+     * @typedef {Object} Window
+     * @property {string} id - Unique identifier for the window.
+     * @property {JFrame} frame - The JFrame instance of the window.
+     * @property {JPanel} mainPanel - The main panel of the window.
+     * @property {JPanel} headerPanel - The header panel of the window.
+     * @property {JPanel} contentPanel - The content panel of the window.
+     * @property {JLabel} titleLabel - The label showing the title of the window.
+     * @property {Object} colorScheme - The color scheme used for the window.
+     * @property {Object} panels - Collection of panels created in the window.
+     * @property {Object} components - Collection of components created in the window.
+     * @property {Array<Timer>} timers - List of timers associated with the window.
+     * @property {Function} show - Method to show the window.
+     * @property {Function} hide - Method to hide the window.
+     * @property {Function} toggle - Method to toggle the visibility of the window.
+     * @property {Function} dispose - Method to dispose of the window.
+     * @property {Function} setTitle - Method to set the window title.
+     * @property {Function} createPanel - Method to create a panel in the window's content area.
+     * @property {Function} createLabel - Method to create a label in a panel.
+     * @property {Function} createButton - Method to create a button in a panel.
+     * @property {Function} createCheckbox - Method to create a checkbox in a panel.
+     * @property {Function} createComboBox - Method to create a dropdown (combo box) in a panel.
+     * @property {Function} createProgressBar - Method to create a progress bar in a panel.
+     * @property {Function} createTextArea - Method to create a text area in a panel.
+     * @property {Function} createSeparator - Method to create a separator in a panel.
+     * @property {Function} updateComponent - Method to update a component's text or value.
+     * @property {Function} updatePanelTitle - Method to update a panel's title.
+     * @property {Function} createTimer - Method to create a timer for periodic updates.
+     * @property {Function} highlightComponent - Method to highlight a component for attention.
+     * @property {Function} updatePanelColor - Method to update panel background color.
      */
+
+    // Store all created windows for management
+
 
     /**
      * Creates a new overlay window with customizable options
