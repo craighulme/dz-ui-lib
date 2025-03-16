@@ -5,21 +5,26 @@
 const JFrame = Java.type("javax.swing.JFrame");
 const JPanel = Java.type("javax.swing.JPanel");
 const JLabel = Java.type("javax.swing.JLabel");
+const JPasswordField = Java.type("javax.swing.JPasswordField");
 const JButton = Java.type("javax.swing.JButton");
 const JCheckBox = Java.type("javax.swing.JCheckBox");
 const JComboBox = Java.type("javax.swing.JComboBox");
 const JScrollPane = Java.type("javax.swing.JScrollPane");
 const JTextArea = Java.type("javax.swing.JTextArea");
+const JTextField = Java.type("javax.swing.JTextField");
 const JSeparator = Java.type("javax.swing.JSeparator");
 const JProgressBar = Java.type("javax.swing.JProgressBar");
 const BorderLayout = Java.type("java.awt.BorderLayout");
 const FlowLayout = Java.type("java.awt.FlowLayout");
 const GridLayout = Java.type("java.awt.GridLayout");
+const Insets = Java.type("java.awt.Insets");
 const GridBagLayout = Java.type("java.awt.GridBagLayout");
 const GridBagConstraints = Java.type("java.awt.GridBagConstraints");
 const Color = Java.type("java.awt.Color");
 const Font = Java.type("java.awt.Font");
 const BorderFactory = Java.type("javax.swing.BorderFactory");
+const BoxLayout = Java.type("javax.swing.BoxLayout");
+const Box = Java.type("javax.swing.Box");
 const SwingConstants = Java.type("javax.swing.SwingConstants");
 const Dimension = Java.type("java.awt.Dimension");
 const PointJ = Java.type("java.awt.Point");
@@ -32,7 +37,7 @@ const TitledBorder = Java.type("javax.swing.border.TitledBorder");
 const MouseEvent = Java.type("java.awt.event.MouseEvent");
 const KeyEvent = Java.type("java.awt.event.KeyEvent");
 const KeyAdapter = Java.type("java.awt.event.KeyAdapter");
-
+const ScrollPaneConstants = Java.type("javax.swing.ScrollPaneConstants");
 
 class SwingUtils {
     /**
