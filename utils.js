@@ -7,6 +7,7 @@ const JPanel = Java.type("javax.swing.JPanel");
 const JLabel = Java.type("javax.swing.JLabel");
 const JPasswordField = Java.type("javax.swing.JPasswordField");
 const JButton = Java.type("javax.swing.JButton");
+const JButtonGroup = Java.type("javax.swing.ButtonGroup");
 const JCheckBox = Java.type("javax.swing.JCheckBox");
 const JComboBox = Java.type("javax.swing.JComboBox");
 const JScrollPane = Java.type("javax.swing.JScrollPane");
