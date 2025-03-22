@@ -106,6 +106,8 @@ class SwingUtils {
      * @returns {Object} Created window object with methods for manipulation
      */
     static createWindow(options) {
+        let dragStartX = 0;
+        let dragStartY = 0;
         if (!options || !options.id) {
             throw new Error("Window ID is required");
         }
@@ -162,8 +164,8 @@ class SwingUtils {
         }
 
         if (draggable) {
-            let dragStartX = 0;
-            let dragStartY = 0;
+            dragStartX = 0;
+            dragStartY = 0;
 
             const headerDragListener = Java.extend(MouseAdapter, {
                 mousePressed: function (e) {
@@ -671,9 +673,9 @@ class SwingUtils {
 
                 if (onChange) {
                     const documentListener = Java.extend(javax.swing.event.DocumentListener, {
-                        insertUpdate: function(e) { onChange(textField.getText()); },
-                        removeUpdate: function(e) { onChange(textField.getText()); },
-                        changedUpdate: function(e) { onChange(textField.getText()); }
+                        insertUpdate: function (e) { onChange(textField.getText()); },
+                        removeUpdate: function (e) { onChange(textField.getText()); },
+                        changedUpdate: function (e) { onChange(textField.getText()); }
                     });
                     textField.getDocument().addDocumentListener(new documentListener());
                 }
@@ -715,7 +717,7 @@ class SwingUtils {
                 const minorTickSpacing = sliderOptions.minorTickSpacing || 5;
 
                 const slider = new JSlider(JSlider.HORIZONTAL, min, max, value);
-                
+
                 if (paintTicks) {
                     slider.setPaintTicks(true);
                     slider.setMajorTickSpacing(majorTickSpacing);
@@ -724,7 +726,7 @@ class SwingUtils {
 
                 if (paintLabels) {
                     slider.setPaintLabels(true);
-                    
+
                     // Create custom labels if provided
                     if (sliderOptions.labels) {
                         const labelTable = new Hashtable();
@@ -805,27 +807,44 @@ class SwingUtils {
                 const selectable = tableOptions.selectable !== false;
                 const region = tableOptions.region || "";
 
-                // Create the table model
-                const tableModel = new DefaultTableModel(
-                    new Array(rows.length).fill(null).map((_, rowIndex) => 
-                        new Array(headers.length).fill(null).map((_, colIndex) => 
-                            rows[rowIndex] && rows[rowIndex][colIndex] ? rows[rowIndex][colIndex] : ""
-                        )
-                    ),
-                    headers
-                );
-                
+                // Create a custom table model if not editable
+                let tableModel;
+
+                if (!editable) {
+                    // Create a non-editable model by extending DefaultTableModel
+                    const CustomTableModel = Java.extend(DefaultTableModel, {
+                        isCellEditable: function () {
+                            return false;
+                        }
+                    });
+
+                    tableModel = new CustomTableModel(
+                        new Array(rows.length).fill(null).map((_, rowIndex) =>
+                            new Array(headers.length).fill(null).map((_, colIndex) =>
+                                rows[rowIndex] && rows[rowIndex][colIndex] ? rows[rowIndex][colIndex] : ""
+                            )
+                        ),
+                        headers
+                    );
+                } else {
+                    // Use standard DefaultTableModel for editable tables
+                    tableModel = new DefaultTableModel(
+                        new Array(rows.length).fill(null).map((_, rowIndex) =>
+                            new Array(headers.length).fill(null).map((_, colIndex) =>
+                                rows[rowIndex] && rows[rowIndex][colIndex] ? rows[rowIndex][colIndex] : ""
+                            )
+                        ),
+                        headers
+                    );
+                }
+
                 // Create the table
                 const table = new JTable(tableModel);
                 table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
-                
+
                 // Handle editability
                 table.setEnabled(true);
-                if (!editable) {
-                    const defaultTableModel = tableModel;
-                    defaultTableModel.isCellEditable = function() { return false; };
-                }
-                
+
                 // Handle selection
                 if (!selectable) {
                     table.setRowSelectionAllowed(false);
@@ -834,12 +853,12 @@ class SwingUtils {
                     table.setRowSelectionAllowed(true);
                     table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
                 }
-                
+
                 // Handle sorting
                 if (sortable) {
                     table.setAutoCreateRowSorter(true);
                 }
-                
+
                 // Customize appearance
                 table.setGridColor(new Color(colorScheme.border.getRGB()));
                 table.setBackground(new Color(
@@ -849,30 +868,61 @@ class SwingUtils {
                     230
                 ));
                 table.setForeground(colorScheme.text);
-                
+
                 // Style the header
                 const tableHeader = table.getTableHeader();
                 tableHeader.setBackground(colorScheme.headerBackground);
                 tableHeader.setForeground(colorScheme.text);
-                
+
                 // Create scrollpane for the table
                 const scrollPane = new JScrollPane(table);
                 scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
                 scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-                
+
                 // Add to parent panel
                 if (this.panels[panelId]) {
                     if (this.panels[panelId].getLayout() instanceof BorderLayout) {
-                        this.panels[panelId].add(scrollPane, region);
+                        // Make sure we're using a valid BorderLayout constraint
+                        const borderLayout = Java.type("java.awt.BorderLayout");
+                        let constraint;
+
+                        // Map string position to BorderLayout constant
+                        switch (region) {
+                            case "CENTER":
+                            case "center":
+                                constraint = borderLayout.CENTER;
+                                break;
+                            case "NORTH":
+                            case "north":
+                                constraint = borderLayout.NORTH;
+                                break;
+                            case "SOUTH":
+                            case "south":
+                                constraint = borderLayout.SOUTH;
+                                break;
+                            case "EAST":
+                            case "east":
+                                constraint = borderLayout.EAST;
+                                break;
+                            case "WEST":
+                            case "west":
+                                constraint = borderLayout.WEST;
+                                break;
+                            default:
+                                // Default to CENTER if not recognized
+                                constraint = borderLayout.CENTER;
+                        }
+
+                        this.panels[panelId].add(scrollPane, constraint);
                     } else {
                         this.panels[panelId].add(scrollPane);
                     }
                 }
-                
+
                 // Store references
                 this.components[tableId] = table;
                 this.tableModels[tableId] = tableModel;
-                
+
                 return scrollPane;
             },
 
@@ -892,54 +942,83 @@ class SwingUtils {
                 const panelId = tabbedPaneOptions.parent;
                 const tabs = tabbedPaneOptions.tabs || [];
                 const onTabChange = tabbedPaneOptions.onTabChange || function () { };
-                const region = tabbedPaneOptions.region || "";
-                
-                let tabPlacement = JTabbedPane.TOP;
-                if (tabbedPaneOptions.tabPlacement) {
-                    switch (tabbedPaneOptions.tabPlacement.toLowerCase()) {
-                        case "bottom": tabPlacement = JTabbedPane.BOTTOM; break;
-                        case "left": tabPlacement = JTabbedPane.LEFT; break;
-                        case "right": tabPlacement = JTabbedPane.RIGHT; break;
-                    }
-                }
-                
-                const tabbedPane = new JTabbedPane(tabPlacement);
-                
+                const region = tabbedPaneOptions.region || BorderLayout.CENTER; // Default to CENTER
+
+                // Create the tabbed pane with a hardcoded value
+                const tabbedPane = new JTabbedPane(1); // TOP = 1
+
                 // Add initial tabs if provided
-                tabs.forEach(tab => {
-                    const panel = new JPanel(new BorderLayout());
-                    panel.setBackground(colorScheme.panelBackground);
-                    
-                    if (tab.content) {
-                        panel.add(tab.content, BorderLayout.CENTER);
-                    }
-                    
-                    tabbedPane.addTab(tab.title, panel);
-                });
-                
+                if (Array.isArray(tabs)) {
+                    tabs.forEach(tab => {
+                        if (tab && typeof tab === 'object') {
+                            const panel = new JPanel(new BorderLayout());
+                            panel.setBackground(colorScheme.panelBackground);
+
+                            if (tab.content) {
+                                panel.add(tab.content, BorderLayout.CENTER);
+                            }
+
+                            tabbedPane.addTab(tab.title || "Tab", panel);
+                        }
+                    });
+                }
+
                 // Add change listener
                 const changeListener = Java.extend(ChangeListener, {
                     stateChanged: function (e) {
                         try {
-                            onTabChange(tabbedPane.getSelectedIndex(), tabbedPane.getTitleAt(tabbedPane.getSelectedIndex()));
+                            if (tabbedPane.getSelectedIndex() >= 0) {
+                                onTabChange(tabbedPane.getSelectedIndex(), tabbedPane.getTitleAt(tabbedPane.getSelectedIndex()));
+                            }
                         } catch (err) {
                             console.error("Error in tabbed pane change handler: " + err.message);
                         }
                     }
                 });
                 tabbedPane.addChangeListener(new changeListener());
-                
+
                 // Add to parent panel
                 if (this.panels[panelId]) {
                     if (this.panels[panelId].getLayout() instanceof BorderLayout) {
-                        this.panels[panelId].add(tabbedPane, region);
+                        // Make sure we're using a valid BorderLayout constraint
+                        const borderLayout = Java.type("java.awt.BorderLayout");
+                        let constraint;
+
+                        // Map string position to BorderLayout constant
+                        switch (region) {
+                            case "CENTER":
+                            case "center":
+                                constraint = borderLayout.CENTER;
+                                break;
+                            case "NORTH":
+                            case "north":
+                                constraint = borderLayout.NORTH;
+                                break;
+                            case "SOUTH":
+                            case "south":
+                                constraint = borderLayout.SOUTH;
+                                break;
+                            case "EAST":
+                            case "east":
+                                constraint = borderLayout.EAST;
+                                break;
+                            case "WEST":
+                            case "west":
+                                constraint = borderLayout.WEST;
+                                break;
+                            default:
+                                // Default to CENTER if not recognized
+                                constraint = borderLayout.CENTER;
+                        }
+
+                        this.panels[panelId].add(tabbedPane, constraint);
                     } else {
                         this.panels[panelId].add(tabbedPane);
                     }
                 }
-                
+
                 this.components[tabbedPaneId] = tabbedPane;
-                
+
                 return tabbedPane;
             },
 
@@ -957,20 +1036,20 @@ class SwingUtils {
                     console.error("Tabbed pane not found with ID: " + tabbedPaneId);
                     return -1;
                 }
-                
+
                 const panel = new JPanel(new BorderLayout());
                 panel.setBackground(colorScheme.panelBackground);
-                
+
                 if (content) {
                     panel.add(content, BorderLayout.CENTER);
                 }
-                
+
                 tabbedPane.addTab(title, panel);
-                
+
                 if (select) {
                     tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
                 }
-                
+
                 return tabbedPane.getTabCount() - 1;
             },
 
@@ -985,7 +1064,7 @@ class SwingUtils {
                     console.error("Table not found with ID: " + tableId);
                     return -1;
                 }
-                
+
                 return table.getSelectedRow();
             },
 
@@ -997,29 +1076,29 @@ class SwingUtils {
             updateTable: function (tableId, rows) {
                 const table = this.components[tableId];
                 const tableModel = this.tableModels[tableId];
-                
+
                 if (!table || !tableModel) {
                     console.error("Table or model not found with ID: " + tableId);
                     return;
                 }
-                
+
                 SwingUtilities.invokeLater(function () {
                     try {
                         // Clear existing data
                         tableModel.setRowCount(0);
-                        
+
                         // Add new rows
                         rows.forEach(row => {
                             tableModel.addRow(row);
                         });
-                        
+
                         // Refresh the table
                         table.repaint();
                     } catch (err) {
                         console.error("Error updating table: " + err.message);
                     }
                 });
-                
+
                 return this;
             },
 
@@ -1046,27 +1125,27 @@ class SwingUtils {
                         if (options.text !== undefined && component.setText) {
                             component.setText(String(options.text));
                         }
-                        
+
                         if (options.value !== undefined && component.setValue) {
                             component.setValue(Number(options.value));
                         }
-                        
+
                         if (options.selected !== undefined && component.setSelected) {
                             component.setSelected(Boolean(options.selected));
                         }
-                        
+
                         if (options.enabled !== undefined && component.setEnabled) {
                             component.setEnabled(Boolean(options.enabled));
                         }
-                        
+
                         if (options.visible !== undefined && component.setVisible) {
                             component.setVisible(Boolean(options.visible));
                         }
-                        
+
                         if (options.foreground !== undefined && component.setForeground) {
                             component.setForeground(options.foreground);
                         }
-                        
+
                         if (options.background !== undefined && component.setBackground) {
                             component.setBackground(options.background);
                         }
@@ -1186,7 +1265,7 @@ class SwingUtils {
             /**
              * Close the window
              */
-            close: function() {
+            close: function () {
                 this.hide();
                 this.dispose();
             }
@@ -1238,7 +1317,7 @@ class SwingUtils {
                     break;
                 }
             }
-            
+
             if (!parentFrame) {
                 parentFrame = new JFrame();
             }
@@ -1304,13 +1383,13 @@ class SwingUtils {
                 SwingUtilities.invokeLater(function () {
                     dialog.dispose();
                 });
-                
+
                 this.timers.forEach(timer => {
                     if (timer && timer.isRunning()) {
                         timer.stop();
                     }
                 });
-                
+
                 delete SwingUtils.windows[id];
                 return this;
             },
@@ -1486,9 +1565,9 @@ class SwingUtils {
 
                 if (onChange) {
                     const documentListener = Java.extend(javax.swing.event.DocumentListener, {
-                        insertUpdate: function(e) { onChange(textField.getText()); },
-                        removeUpdate: function(e) { onChange(textField.getText()); },
-                        changedUpdate: function(e) { onChange(textField.getText()); }
+                        insertUpdate: function (e) { onChange(textField.getText()); },
+                        removeUpdate: function (e) { onChange(textField.getText()); },
+                        changedUpdate: function (e) { onChange(textField.getText()); }
                     });
                     textField.getDocument().addDocumentListener(new documentListener());
                 }
@@ -1514,25 +1593,25 @@ class SwingUtils {
 
                 // Create the table model
                 const tableModel = new DefaultTableModel(
-                    new Array(rows.length).fill(null).map((_, rowIndex) => 
-                        new Array(headers.length).fill(null).map((_, colIndex) => 
+                    new Array(rows.length).fill(null).map((_, rowIndex) =>
+                        new Array(headers.length).fill(null).map((_, colIndex) =>
                             rows[rowIndex] && rows[rowIndex][colIndex] ? rows[rowIndex][colIndex] : ""
                         )
                     ),
                     headers
                 );
-                
+
                 // Create the table
                 const table = new JTable(tableModel);
                 table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
-                
+
                 // Handle editability
                 table.setEnabled(true);
                 if (!editable) {
                     const defaultTableModel = tableModel;
-                    defaultTableModel.isCellEditable = function() { return false; };
+                    defaultTableModel.isCellEditable = function () { return false; };
                 }
-                
+
                 // Handle selection
                 if (!selectable) {
                     table.setRowSelectionAllowed(false);
@@ -1541,12 +1620,12 @@ class SwingUtils {
                     table.setRowSelectionAllowed(true);
                     table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
                 }
-                
+
                 // Handle sorting
                 if (sortable) {
                     table.setAutoCreateRowSorter(true);
                 }
-                
+
                 // Customize appearance
                 table.setGridColor(new Color(colorScheme.border.getRGB()));
                 table.setBackground(new Color(
@@ -1556,17 +1635,17 @@ class SwingUtils {
                     230
                 ));
                 table.setForeground(colorScheme.text);
-                
+
                 // Style the header
                 const tableHeader = table.getTableHeader();
                 tableHeader.setBackground(colorScheme.headerBackground);
                 tableHeader.setForeground(colorScheme.text);
-                
+
                 // Create scrollpane for the table
                 const scrollPane = new JScrollPane(table);
                 scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
                 scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-                
+
                 // Add to parent panel
                 if (this.panels[panelId]) {
                     if (this.panels[panelId].getLayout() instanceof BorderLayout) {
@@ -1575,40 +1654,40 @@ class SwingUtils {
                         this.panels[panelId].add(scrollPane);
                     }
                 }
-                
+
                 // Store references
                 this.components[tableId] = table;
                 this.tableModels[tableId] = tableModel;
-                
+
                 return scrollPane;
             },
 
             updateTable: function (tableId, rows) {
                 const table = this.components[tableId];
                 const tableModel = this.tableModels[tableId];
-                
+
                 if (!table || !tableModel) {
                     console.error("Table or model not found with ID: " + tableId);
                     return;
                 }
-                
+
                 SwingUtilities.invokeLater(function () {
                     try {
                         // Clear existing data
                         tableModel.setRowCount(0);
-                        
+
                         // Add new rows
                         rows.forEach(row => {
                             tableModel.addRow(row);
                         });
-                        
+
                         // Refresh the table
                         table.repaint();
                     } catch (err) {
                         console.error("Error updating table: " + err.message);
                     }
                 });
-                
+
                 return this;
             },
 
@@ -1618,7 +1697,7 @@ class SwingUtils {
                     console.error("Table not found with ID: " + tableId);
                     return -1;
                 }
-                
+
                 return table.getSelectedRow();
             },
 
@@ -1635,19 +1714,19 @@ class SwingUtils {
                         if (options.text !== undefined && component.setText) {
                             component.setText(String(options.text));
                         }
-                        
+
                         if (options.value !== undefined && component.setValue) {
                             component.setValue(Number(options.value));
                         }
-                        
+
                         if (options.selected !== undefined && component.setSelected) {
                             component.setSelected(Boolean(options.selected));
                         }
-                        
+
                         if (options.enabled !== undefined && component.setEnabled) {
                             component.setEnabled(Boolean(options.enabled));
                         }
-                        
+
                         if (options.visible !== undefined && component.setVisible) {
                             component.setVisible(Boolean(options.visible));
                         }
@@ -1702,7 +1781,7 @@ class SwingUtils {
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.QUESTION_MESSAGE
             );
-            
+
             if (result === JOptionPane.YES_OPTION && onYes) {
                 onYes();
             } else if (result === JOptionPane.NO_OPTION && onNo) {
@@ -1729,7 +1808,7 @@ class SwingUtils {
                 null,
                 initialValue
             );
-            
+
             if (callback) {
                 callback(result);
             }
@@ -1744,12 +1823,12 @@ class SwingUtils {
      */
     static formatDuration(milliseconds, short = false) {
         if (milliseconds < 0) return short ? "0s" : "0 seconds";
-        
+
         const seconds = Math.floor(milliseconds / 1000);
         const minutes = Math.floor(seconds / 60);
         const hours = Math.floor(minutes / 60);
         const days = Math.floor(hours / 24);
-        
+
         if (short) {
             if (days > 0) return `${days}d ${hours % 24}h`;
             if (hours > 0) return `${hours}h ${minutes % 60}m`;
@@ -1757,12 +1836,12 @@ class SwingUtils {
             return `${seconds}s`;
         } else {
             const parts = [];
-            
+
             if (days > 0) parts.push(`${days} day${days !== 1 ? "s" : ""}`);
             if (hours % 24 > 0) parts.push(`${hours % 24} hour${hours % 24 !== 1 ? "s" : ""}`);
             if (minutes % 60 > 0) parts.push(`${minutes % 60} minute${minutes % 60 !== 1 ? "s" : ""}`);
             if (seconds % 60 > 0) parts.push(`${seconds % 60} second${seconds % 60 !== 1 ? "s" : ""}`);
-            
+
             return parts.join(", ");
         }
     }
