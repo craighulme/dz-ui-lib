@@ -17,6 +17,14 @@ const JTextField = Java.type("javax.swing.JTextField");
 const JSeparator = Java.type("javax.swing.JSeparator");
 const JSlider = Java.type("javax.swing.JSlider");
 const JProgressBar = Java.type("javax.swing.JProgressBar");
+const JTable = Java.type("javax.swing.JTable");
+const DefaultTableModel = Java.type("javax.swing.table.DefaultTableModel");
+const JDialog = Java.type("javax.swing.JDialog");
+const JTabbedPane = Java.type("javax.swing.JTabbedPane");
+const JOptionPane = Java.type("javax.swing.JOptionPane");
+const ChangeListener = Java.type("javax.swing.event.ChangeListener");
+const Hashtable = Java.type("java.util.Hashtable");
+const TableRowSorter = Java.type("javax.swing.table.TableRowSorter");
 const BorderLayout = Java.type("java.awt.BorderLayout");
 const FlowLayout = Java.type("java.awt.FlowLayout");
 const GridLayout = Java.type("java.awt.GridLayout");
@@ -228,6 +236,7 @@ class SwingUtils {
             panels: {},
             components: {},
             timers: [],
+            tableModels: {},
 
             show: function () {
                 SwingUtilities.invokeLater(function () {
@@ -285,17 +294,27 @@ class SwingUtils {
              * @param {Object} [panelOptions.layoutOptions] - Layout-specific options
              * @param {string} [panelOptions.position="center"] - Position in parent (for BorderLayout)
              * @param {Object} [panelOptions.parent] - Parent panel ID or null for main content
+             * @param {boolean} [panelOptions.visible=true] - Whether the panel is initially visible
              * @returns {JPanel} Created panel
              */
             createPanel: function (panelOptions) {
                 const panelId = panelOptions.id;
                 const panelTitle = panelOptions.title;
-                const layoutType = panelOptions.layout || "grid";
+                let layoutType = panelOptions.layout || "grid";
                 const layoutOptions = panelOptions.layoutOptions || {};
                 const position = panelOptions.position || BorderLayout.CENTER;
                 const parentId = panelOptions.parent;
+                const visible = panelOptions.visible !== false;
 
                 const panel = new JPanel();
+
+                // Extract number of columns if specified in layout string (e.g., "grid,2")
+                let cols = 1;
+                if (layoutType && layoutType.includes(",")) {
+                    const parts = layoutType.split(",");
+                    layoutType = parts[0];
+                    cols = parseInt(parts[1]) || 1;
+                }
 
                 if (layoutType === "border") {
                     panel.setLayout(new BorderLayout(
@@ -311,12 +330,14 @@ class SwingUtils {
                 } else if (layoutType === "grid") {
                     panel.setLayout(new GridLayout(
                         layoutOptions.rows || 1,
-                        layoutOptions.cols || 1,
+                        layoutOptions.cols || cols,
                         layoutOptions.hgap || 2,
                         layoutOptions.vgap || 2
                     ));
                 } else if (layoutType === "gridbag") {
                     panel.setLayout(new GridBagLayout());
+                } else if (layoutType === "card") {
+                    panel.setLayout(new java.awt.CardLayout());
                 }
 
                 panel.setBackground(new Color(
@@ -343,6 +364,8 @@ class SwingUtils {
                     panel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
                 }
 
+                panel.setVisible(visible);
+
                 if (parentId && this.panels[parentId]) {
                     this.panels[parentId].add(panel, position);
                 } else {
@@ -359,33 +382,44 @@ class SwingUtils {
              * @param {Object} labelOptions - Label configuration
              * @param {string} labelOptions.id - Unique identifier for the label
              * @param {string} labelOptions.text - Label text
-             * @param {string} labelOptions.panel - Parent panel ID
+             * @param {string} labelOptions.parent - Parent panel ID
              * @param {string} [labelOptions.position=""] - Position in parent (for BorderLayout)
-             * @param {Object} [labelOptions.font] - Font options
+             * @param {string|Object} [labelOptions.font] - Font options as string "bold,16" or object
              * @param {Color} [labelOptions.color] - Text color
              * @param {number} [labelOptions.align=SwingConstants.LEFT] - Text alignment
+             * @param {string} [labelOptions.region=""] - Region for BorderLayout
              * @returns {JLabel} Created label
              */
             createLabel: function (labelOptions) {
                 const labelId = labelOptions.id;
                 const text = labelOptions.text || "";
-                const panelId = labelOptions.panel;
+                const panelId = labelOptions.parent;
                 const position = labelOptions.position || "";
-                const fontOptions = labelOptions.font || {};
                 const color = labelOptions.color || colorScheme.text;
                 const align = labelOptions.align || SwingConstants.LEFT;
+                const region = labelOptions.region || position;
 
                 const label = new JLabel(text, align);
                 label.setForeground(color);
 
-                const fontFamily = fontOptions.family || "Dialog";
-                const fontStyle = fontOptions.style || Font.PLAIN;
-                const fontSize = fontOptions.size || 11;
-                label.setFont(new Font(fontFamily, fontStyle, fontSize));
+                // Handle font options as either string or object
+                if (labelOptions.font) {
+                    if (typeof labelOptions.font === 'string') {
+                        const fontParts = labelOptions.font.split(',');
+                        const fontStyle = fontParts[0] === 'bold' ? Font.BOLD : Font.PLAIN;
+                        const fontSize = fontParts.length > 1 ? parseInt(fontParts[1]) : 11;
+                        label.setFont(new Font("Dialog", fontStyle, fontSize));
+                    } else {
+                        const fontFamily = labelOptions.font.family || "Dialog";
+                        const fontStyle = labelOptions.font.style || Font.PLAIN;
+                        const fontSize = labelOptions.font.size || 11;
+                        label.setFont(new Font(fontFamily, fontStyle, fontSize));
+                    }
+                }
 
                 if (this.panels[panelId]) {
                     if (this.panels[panelId].getLayout() instanceof BorderLayout) {
-                        this.panels[panelId].add(label, position);
+                        this.panels[panelId].add(label, region);
                     } else {
                         this.panels[panelId].add(label);
                     }
@@ -401,17 +435,19 @@ class SwingUtils {
              * @param {Object} buttonOptions - Button configuration
              * @param {string} buttonOptions.id - Unique identifier for the button
              * @param {string} buttonOptions.text - Button text
-             * @param {string} buttonOptions.panel - Parent panel ID
+             * @param {string} buttonOptions.parent - Parent panel ID
              * @param {string} [buttonOptions.position=""] - Position in parent (for BorderLayout)
              * @param {Function} [buttonOptions.onClick] - Click event handler
+             * @param {string} [buttonOptions.region=""] - Region for BorderLayout
              * @returns {JButton} Created button
              */
             createButton: function (buttonOptions) {
                 const buttonId = buttonOptions.id;
                 const text = buttonOptions.text || "Button";
-                const panelId = buttonOptions.panel;
+                const panelId = buttonOptions.parent;
                 const position = buttonOptions.position || "";
                 const onClick = buttonOptions.onClick || function () { };
+                const region = buttonOptions.region || position;
 
                 const button = new JButton(text);
 
@@ -428,7 +464,7 @@ class SwingUtils {
 
                 if (this.panels[panelId]) {
                     if (this.panels[panelId].getLayout() instanceof BorderLayout) {
-                        this.panels[panelId].add(button, position);
+                        this.panels[panelId].add(button, region);
                     } else {
                         this.panels[panelId].add(button);
                     }
@@ -444,7 +480,7 @@ class SwingUtils {
              * @param {Object} checkboxOptions - Checkbox configuration
              * @param {string} checkboxOptions.id - Unique identifier for the checkbox
              * @param {string} checkboxOptions.text - Checkbox text
-             * @param {string} checkboxOptions.panel - Parent panel ID
+             * @param {string} checkboxOptions.parent - Parent panel ID
              * @param {boolean} [checkboxOptions.selected=false] - Initial selection state
              * @param {Function} [checkboxOptions.onChange] - Change event handler
              * @returns {JCheckBox} Created checkbox
@@ -452,7 +488,7 @@ class SwingUtils {
             createCheckbox: function (checkboxOptions) {
                 const checkboxId = checkboxOptions.id;
                 const text = checkboxOptions.text || "";
-                const panelId = checkboxOptions.panel;
+                const panelId = checkboxOptions.parent;
                 const selected = checkboxOptions.selected || false;
                 const onChange = checkboxOptions.onChange || function () { };
 
@@ -485,7 +521,7 @@ class SwingUtils {
              * @param {Object} comboOptions - Combo box configuration
              * @param {string} comboOptions.id - Unique identifier for the combo box
              * @param {Array} comboOptions.items - Array of items to display
-             * @param {string} comboOptions.panel - Parent panel ID
+             * @param {string} comboOptions.parent - Parent panel ID
              * @param {number} [comboOptions.selected=0] - Initial selected index
              * @param {Function} [comboOptions.onChange] - Change event handler
              * @returns {JComboBox} Created combo box
@@ -493,7 +529,7 @@ class SwingUtils {
             createComboBox: function (comboOptions) {
                 const comboId = comboOptions.id;
                 const items = comboOptions.items || [];
-                const panelId = comboOptions.panel;
+                const panelId = comboOptions.parent;
                 const selected = comboOptions.selected || 0;
                 const onChange = comboOptions.onChange || function () { };
 
@@ -531,7 +567,7 @@ class SwingUtils {
              * Creates a progress bar in a panel
              * @param {Object} progressOptions - Progress bar configuration
              * @param {string} progressOptions.id - Unique identifier for the progress bar
-             * @param {string} progressOptions.panel - Parent panel ID
+             * @param {string} progressOptions.parent - Parent panel ID
              * @param {number} [progressOptions.min=0] - Minimum value
              * @param {number} [progressOptions.max=100] - Maximum value
              * @param {number} [progressOptions.value=0] - Initial value
@@ -540,7 +576,7 @@ class SwingUtils {
              */
             createProgressBar: function (progressOptions) {
                 const progressId = progressOptions.id;
-                const panelId = progressOptions.panel;
+                const panelId = progressOptions.parent;
                 const min = progressOptions.min || 0;
                 const max = progressOptions.max || 100;
                 const value = progressOptions.value || 0;
@@ -563,7 +599,7 @@ class SwingUtils {
              * Creates a text area in a panel
              * @param {Object} textAreaOptions - Text area configuration
              * @param {string} textAreaOptions.id - Unique identifier for the text area
-             * @param {string} textAreaOptions.panel - Parent panel ID
+             * @param {string} textAreaOptions.parent - Parent panel ID
              * @param {string} [textAreaOptions.text=""] - Initial text
              * @param {number} [textAreaOptions.rows=5] - Number of rows
              * @param {number} [textAreaOptions.cols=20] - Number of columns
@@ -573,7 +609,7 @@ class SwingUtils {
              */
             createTextArea: function (textAreaOptions) {
                 const textAreaId = textAreaOptions.id;
-                const panelId = textAreaOptions.panel;
+                const panelId = textAreaOptions.parent;
                 const text = textAreaOptions.text || "";
                 const rows = textAreaOptions.rows || 5;
                 const cols = textAreaOptions.cols || 20;
@@ -608,16 +644,130 @@ class SwingUtils {
             },
 
             /**
+             * Creates a text field in a panel
+             * @param {Object} textFieldOptions - Text field configuration
+             * @param {string} textFieldOptions.id - Unique identifier for the text field
+             * @param {string} textFieldOptions.parent - Parent panel ID
+             * @param {string} [textFieldOptions.text=""] - Initial text
+             * @param {number} [textFieldOptions.columns=10] - Number of columns
+             * @param {Function} [textFieldOptions.onChange] - Change event handler
+             * @returns {JTextField} Created text field
+             */
+            createTextField: function (textFieldOptions) {
+                const textFieldId = textFieldOptions.id;
+                const panelId = textFieldOptions.parent;
+                const text = textFieldOptions.text || "";
+                const columns = textFieldOptions.columns || 10;
+                const onChange = textFieldOptions.onChange || function () { };
+
+                const textField = new JTextField(text, columns);
+                textField.setForeground(colorScheme.text);
+                textField.setBackground(new Color(
+                    colorScheme.background.getRed(),
+                    colorScheme.background.getGreen(),
+                    colorScheme.background.getBlue(),
+                    230
+                ));
+
+                if (onChange) {
+                    const documentListener = Java.extend(javax.swing.event.DocumentListener, {
+                        insertUpdate: function(e) { onChange(textField.getText()); },
+                        removeUpdate: function(e) { onChange(textField.getText()); },
+                        changedUpdate: function(e) { onChange(textField.getText()); }
+                    });
+                    textField.getDocument().addDocumentListener(new documentListener());
+                }
+
+                if (this.panels[panelId]) {
+                    this.panels[panelId].add(textField);
+                }
+
+                this.components[textFieldId] = textField;
+
+                return textField;
+            },
+
+            /**
+             * Creates a slider in a panel
+             * @param {Object} sliderOptions - Slider configuration
+             * @param {string} sliderOptions.id - Unique identifier for the slider
+             * @param {string} sliderOptions.parent - Parent panel ID
+             * @param {number} [sliderOptions.min=0] - Minimum value
+             * @param {number} [sliderOptions.max=100] - Maximum value
+             * @param {number} [sliderOptions.value=50] - Initial value
+             * @param {Function} [sliderOptions.onChange] - Change event handler
+             * @param {boolean} [sliderOptions.paintLabels=false] - Whether to paint labels
+             * @param {boolean} [sliderOptions.paintTicks=false] - Whether to paint ticks
+             * @param {number} [sliderOptions.majorTickSpacing=10] - Spacing between major ticks
+             * @param {number} [sliderOptions.minorTickSpacing=5] - Spacing between minor ticks
+             * @returns {JSlider} Created slider
+             */
+            createSlider: function (sliderOptions) {
+                const sliderId = sliderOptions.id;
+                const panelId = sliderOptions.parent;
+                const min = sliderOptions.min || 0;
+                const max = sliderOptions.max || 100;
+                const value = sliderOptions.value || 50;
+                const onChange = sliderOptions.onChange || function () { };
+                const paintLabels = sliderOptions.paintLabels || false;
+                const paintTicks = sliderOptions.paintTicks || false;
+                const majorTickSpacing = sliderOptions.majorTickSpacing || 10;
+                const minorTickSpacing = sliderOptions.minorTickSpacing || 5;
+
+                const slider = new JSlider(JSlider.HORIZONTAL, min, max, value);
+                
+                if (paintTicks) {
+                    slider.setPaintTicks(true);
+                    slider.setMajorTickSpacing(majorTickSpacing);
+                    slider.setMinorTickSpacing(minorTickSpacing);
+                }
+
+                if (paintLabels) {
+                    slider.setPaintLabels(true);
+                    
+                    // Create custom labels if provided
+                    if (sliderOptions.labels) {
+                        const labelTable = new Hashtable();
+                        for (const [value, label] of Object.entries(sliderOptions.labels)) {
+                            labelTable.put(parseInt(value), new JLabel(label));
+                        }
+                        slider.setLabelTable(labelTable);
+                    }
+                }
+
+                const changeListener = Java.extend(ChangeListener, {
+                    stateChanged: function (e) {
+                        try {
+                            if (!slider.getValueIsAdjusting() || sliderOptions.continuous) {
+                                onChange(slider.getValue());
+                            }
+                        } catch (err) {
+                            console.error("Error in slider change handler: " + err.message);
+                        }
+                    }
+                });
+                slider.addChangeListener(new changeListener());
+
+                if (this.panels[panelId]) {
+                    this.panels[panelId].add(slider);
+                }
+
+                this.components[sliderId] = slider;
+
+                return slider;
+            },
+
+            /**
              * Creates a separator in a panel
              * @param {Object} separatorOptions - Separator configuration
              * @param {string} separatorOptions.id - Unique identifier for the separator
-             * @param {string} separatorOptions.panel - Parent panel ID
+             * @param {string} separatorOptions.parent - Parent panel ID
              * @param {boolean} [separatorOptions.horizontal=true] - Orientation
              * @returns {JSeparator} Created separator
              */
             createSeparator: function (separatorOptions) {
                 const separatorId = separatorOptions.id;
-                const panelId = separatorOptions.panel;
+                const panelId = separatorOptions.parent;
                 const horizontal = separatorOptions.horizontal !== false;
 
                 const orientation = horizontal ? JSeparator.HORIZONTAL : JSeparator.VERTICAL;
@@ -633,32 +783,292 @@ class SwingUtils {
             },
 
             /**
+             * Creates a table in a panel
+             * @param {Object} tableOptions - Table configuration
+             * @param {string} tableOptions.id - Unique identifier for the table
+             * @param {string} tableOptions.parent - Parent panel ID
+             * @param {Array<string>} tableOptions.headers - Column headers
+             * @param {Array<Array>} [tableOptions.rows=[]] - Initial data rows
+             * @param {boolean} [tableOptions.editable=false] - Whether the table is editable
+             * @param {boolean} [tableOptions.sortable=false] - Whether the table is sortable
+             * @param {boolean} [tableOptions.selectable=true] - Whether rows can be selected
+             * @param {string} [tableOptions.region=""] - Region for BorderLayout
+             * @returns {JScrollPane} Scroll pane containing the created table
+             */
+            createTable: function (tableOptions) {
+                const tableId = tableOptions.id;
+                const panelId = tableOptions.parent;
+                const headers = tableOptions.headers || [];
+                const rows = tableOptions.rows || [];
+                const editable = tableOptions.editable || false;
+                const sortable = tableOptions.sortable || false;
+                const selectable = tableOptions.selectable !== false;
+                const region = tableOptions.region || "";
+
+                // Create the table model
+                const tableModel = new DefaultTableModel(
+                    new Array(rows.length).fill(null).map((_, rowIndex) => 
+                        new Array(headers.length).fill(null).map((_, colIndex) => 
+                            rows[rowIndex] && rows[rowIndex][colIndex] ? rows[rowIndex][colIndex] : ""
+                        )
+                    ),
+                    headers
+                );
+                
+                // Create the table
+                const table = new JTable(tableModel);
+                table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+                
+                // Handle editability
+                table.setEnabled(true);
+                if (!editable) {
+                    const defaultTableModel = tableModel;
+                    defaultTableModel.isCellEditable = function() { return false; };
+                }
+                
+                // Handle selection
+                if (!selectable) {
+                    table.setRowSelectionAllowed(false);
+                    table.setCellSelectionEnabled(false);
+                } else {
+                    table.setRowSelectionAllowed(true);
+                    table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+                }
+                
+                // Handle sorting
+                if (sortable) {
+                    table.setAutoCreateRowSorter(true);
+                }
+                
+                // Customize appearance
+                table.setGridColor(new Color(colorScheme.border.getRGB()));
+                table.setBackground(new Color(
+                    colorScheme.background.getRed(),
+                    colorScheme.background.getGreen(),
+                    colorScheme.background.getBlue(),
+                    230
+                ));
+                table.setForeground(colorScheme.text);
+                
+                // Style the header
+                const tableHeader = table.getTableHeader();
+                tableHeader.setBackground(colorScheme.headerBackground);
+                tableHeader.setForeground(colorScheme.text);
+                
+                // Create scrollpane for the table
+                const scrollPane = new JScrollPane(table);
+                scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+                scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+                
+                // Add to parent panel
+                if (this.panels[panelId]) {
+                    if (this.panels[panelId].getLayout() instanceof BorderLayout) {
+                        this.panels[panelId].add(scrollPane, region);
+                    } else {
+                        this.panels[panelId].add(scrollPane);
+                    }
+                }
+                
+                // Store references
+                this.components[tableId] = table;
+                this.tableModels[tableId] = tableModel;
+                
+                return scrollPane;
+            },
+
+            /**
+             * Creates a tabbed pane in a panel
+             * @param {Object} tabbedPaneOptions - Tabbed pane configuration
+             * @param {string} tabbedPaneOptions.id - Unique identifier for the tabbed pane
+             * @param {string} tabbedPaneOptions.parent - Parent panel ID
+             * @param {Array<Object>} [tabbedPaneOptions.tabs=[]] - Initial tabs [{title, content}]
+             * @param {Function} [tabbedPaneOptions.onTabChange] - Tab change event handler
+             * @param {string} [tabbedPaneOptions.tabPlacement="top"] - Tab placement (top, bottom, left, right)
+             * @param {string} [tabbedPaneOptions.region=""] - Region for BorderLayout
+             * @returns {JTabbedPane} Created tabbed pane
+             */
+            createTabbedPane: function (tabbedPaneOptions) {
+                const tabbedPaneId = tabbedPaneOptions.id;
+                const panelId = tabbedPaneOptions.parent;
+                const tabs = tabbedPaneOptions.tabs || [];
+                const onTabChange = tabbedPaneOptions.onTabChange || function () { };
+                const region = tabbedPaneOptions.region || "";
+                
+                let tabPlacement = JTabbedPane.TOP;
+                if (tabbedPaneOptions.tabPlacement) {
+                    switch (tabbedPaneOptions.tabPlacement.toLowerCase()) {
+                        case "bottom": tabPlacement = JTabbedPane.BOTTOM; break;
+                        case "left": tabPlacement = JTabbedPane.LEFT; break;
+                        case "right": tabPlacement = JTabbedPane.RIGHT; break;
+                    }
+                }
+                
+                const tabbedPane = new JTabbedPane(tabPlacement);
+                
+                // Add initial tabs if provided
+                tabs.forEach(tab => {
+                    const panel = new JPanel(new BorderLayout());
+                    panel.setBackground(colorScheme.panelBackground);
+                    
+                    if (tab.content) {
+                        panel.add(tab.content, BorderLayout.CENTER);
+                    }
+                    
+                    tabbedPane.addTab(tab.title, panel);
+                });
+                
+                // Add change listener
+                const changeListener = Java.extend(ChangeListener, {
+                    stateChanged: function (e) {
+                        try {
+                            onTabChange(tabbedPane.getSelectedIndex(), tabbedPane.getTitleAt(tabbedPane.getSelectedIndex()));
+                        } catch (err) {
+                            console.error("Error in tabbed pane change handler: " + err.message);
+                        }
+                    }
+                });
+                tabbedPane.addChangeListener(new changeListener());
+                
+                // Add to parent panel
+                if (this.panels[panelId]) {
+                    if (this.panels[panelId].getLayout() instanceof BorderLayout) {
+                        this.panels[panelId].add(tabbedPane, region);
+                    } else {
+                        this.panels[panelId].add(tabbedPane);
+                    }
+                }
+                
+                this.components[tabbedPaneId] = tabbedPane;
+                
+                return tabbedPane;
+            },
+
+            /**
+             * Adds a tab to a tabbed pane
+             * @param {string} tabbedPaneId - ID of the tabbed pane
+             * @param {string} title - Tab title
+             * @param {JComponent} content - Tab content
+             * @param {boolean} [select=false] - Whether to select the new tab
+             * @returns {number} Index of the added tab
+             */
+            addTab: function (tabbedPaneId, title, content, select) {
+                const tabbedPane = this.components[tabbedPaneId];
+                if (!tabbedPane || !(tabbedPane instanceof JTabbedPane)) {
+                    console.error("Tabbed pane not found with ID: " + tabbedPaneId);
+                    return -1;
+                }
+                
+                const panel = new JPanel(new BorderLayout());
+                panel.setBackground(colorScheme.panelBackground);
+                
+                if (content) {
+                    panel.add(content, BorderLayout.CENTER);
+                }
+                
+                tabbedPane.addTab(title, panel);
+                
+                if (select) {
+                    tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
+                }
+                
+                return tabbedPane.getTabCount() - 1;
+            },
+
+            /**
+             * Gets the selected row index in a table
+             * @param {string} tableId - Table ID
+             * @returns {number} Selected row index or -1 if no selection
+             */
+            getSelectedRow: function (tableId) {
+                const table = this.components[tableId];
+                if (!table || !(table instanceof JTable)) {
+                    console.error("Table not found with ID: " + tableId);
+                    return -1;
+                }
+                
+                return table.getSelectedRow();
+            },
+
+            /**
+             * Updates a table with new data
+             * @param {string} tableId - Table ID
+             * @param {Array<Array>} rows - New data rows
+             */
+            updateTable: function (tableId, rows) {
+                const table = this.components[tableId];
+                const tableModel = this.tableModels[tableId];
+                
+                if (!table || !tableModel) {
+                    console.error("Table or model not found with ID: " + tableId);
+                    return;
+                }
+                
+                SwingUtilities.invokeLater(function () {
+                    try {
+                        // Clear existing data
+                        tableModel.setRowCount(0);
+                        
+                        // Add new rows
+                        rows.forEach(row => {
+                            tableModel.addRow(row);
+                        });
+                        
+                        // Refresh the table
+                        table.repaint();
+                    } catch (err) {
+                        console.error("Error updating table: " + err.message);
+                    }
+                });
+                
+                return this;
+            },
+
+            /**
+             * Gets the component with the specified ID
+             * @param {string} id - Component ID
+             * @returns {Object} The component or null if not found
+             */
+            getComponent: function (id) {
+                return this.components[id] || null;
+            },
+
+            /**
              * Updates a component's text or value
              * @param {string} id - Component ID
-             * @param {*} value - New value (text for labels, selection for checkboxes, etc.)
+             * @param {Object} options - Properties to update
              */
-            updateComponent: function (id, value) {
+            updateComponent: function (id, options) {
                 const component = this.components[id];
                 if (!component) return;
 
                 SwingUtilities.invokeLater(function () {
                     try {
-                        if (component instanceof JLabel) {
-                            component.setText(String(value));
-                        } else if (component instanceof JButton) {
-                            component.setText(String(value));
-                        } else if (component instanceof JCheckBox) {
-                            component.setSelected(Boolean(value));
-                        } else if (component instanceof JProgressBar) {
-                            component.setValue(Number(value));
-                        } else if (component instanceof JTextArea) {
-                            component.setText(String(value));
-                        } else if (component instanceof JComboBox) {
-                            if (typeof value === "number") {
-                                component.setSelectedIndex(value);
-                            } else {
-                                component.setSelectedItem(value);
-                            }
+                        if (options.text !== undefined && component.setText) {
+                            component.setText(String(options.text));
+                        }
+                        
+                        if (options.value !== undefined && component.setValue) {
+                            component.setValue(Number(options.value));
+                        }
+                        
+                        if (options.selected !== undefined && component.setSelected) {
+                            component.setSelected(Boolean(options.selected));
+                        }
+                        
+                        if (options.enabled !== undefined && component.setEnabled) {
+                            component.setEnabled(Boolean(options.enabled));
+                        }
+                        
+                        if (options.visible !== undefined && component.setVisible) {
+                            component.setVisible(Boolean(options.visible));
+                        }
+                        
+                        if (options.foreground !== undefined && component.setForeground) {
+                            component.setForeground(options.foreground);
+                        }
+                        
+                        if (options.background !== undefined && component.setBackground) {
+                            component.setBackground(options.background);
                         }
                     } catch (err) {
                         console.error("Error updating component: " + err.message);
@@ -771,12 +1181,590 @@ class SwingUtils {
                 });
 
                 return this;
+            },
+
+            /**
+             * Close the window
+             */
+            close: function() {
+                this.hide();
+                this.dispose();
             }
         };
 
         this.windows[id] = windowObj;
 
         return windowObj;
+    }
+
+    /**
+     * Creates a dialog window
+     * @param {Object} options - Dialog configuration
+     * @param {string} options.id - Unique identifier for the dialog
+     * @param {string} options.title - Dialog title
+     * @param {Object} [options.colorScheme] - Color scheme to use
+     * @param {number} [options.width=300] - Width of the dialog
+     * @param {number} [options.height=200] - Height of the dialog
+     * @param {boolean} [options.modal=true] - Whether the dialog is modal
+     * @param {boolean} [options.resizable=false] - Whether the dialog is resizable
+     * @param {Function} [options.onClose] - Callback when dialog is closed
+     * @returns {Object} Created dialog object with similar methods to window
+     */
+    static createDialog(options) {
+        if (!options || !options.id) {
+            throw new Error("Dialog ID is required");
+        }
+
+        if (this.windows[options.id]) {
+            return this.windows[options.id];
+        }
+
+        const id = options.id;
+        const title = options.title || "Dialog";
+        const colorScheme = options.colorScheme || this.ColorSchemes.DARK;
+        const width = options.width || 300;
+        const height = options.height || 200;
+        const modal = options.modal !== false;
+        const resizable = options.resizable || false;
+        const onClose = options.onClose || function () { };
+
+        // Create a parent frame if none exists (needed for modality)
+        let parentFrame = null;
+        if (modal) {
+            for (const windowId in this.windows) {
+                const window = this.windows[windowId];
+                if (window.frame && window.frame.isVisible()) {
+                    parentFrame = window.frame;
+                    break;
+                }
+            }
+            
+            if (!parentFrame) {
+                parentFrame = new JFrame();
+            }
+        }
+
+        const dialog = new JDialog(parentFrame, title, modal);
+        dialog.setUndecorated(false);
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        dialog.setResizable(resizable);
+
+        const mainPanel = new JPanel();
+        mainPanel.setLayout(new BorderLayout());
+        mainPanel.setBackground(colorScheme.background);
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        const contentPanel = new JPanel();
+        contentPanel.setLayout(new BorderLayout());
+        contentPanel.setBackground(colorScheme.panelBackground);
+        contentPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
+        mainPanel.add(contentPanel, BorderLayout.CENTER);
+        dialog.getContentPane().add(mainPanel);
+
+        dialog.setSize(width, height);
+        dialog.setLocationRelativeTo(null);
+
+        dialog.addWindowListener(new Java.extend(java.awt.event.WindowAdapter, {
+            windowClosing: function (e) {
+                try {
+                    onClose();
+                } catch (err) {
+                    console.error("Error in dialog close handler: " + err.message);
+                }
+            }
+        }));
+
+        const dialogObj = {
+            id,
+            dialog,
+            mainPanel,
+            contentPanel,
+            colorScheme,
+            panels: {},
+            components: {},
+            timers: [],
+            tableModels: {},
+
+            show: function () {
+                SwingUtilities.invokeLater(function () {
+                    dialog.setVisible(true);
+                });
+                return this;
+            },
+
+            hide: function () {
+                SwingUtilities.invokeLater(function () {
+                    dialog.setVisible(false);
+                });
+                return this;
+            },
+
+            close: function () {
+                SwingUtilities.invokeLater(function () {
+                    dialog.dispose();
+                });
+                
+                this.timers.forEach(timer => {
+                    if (timer && timer.isRunning()) {
+                        timer.stop();
+                    }
+                });
+                
+                delete SwingUtils.windows[id];
+                return this;
+            },
+
+            // Implementation of all the same methods as window
+            createPanel: function (panelOptions) {
+                const panelId = panelOptions.id;
+                const panelTitle = panelOptions.title;
+                let layoutType = panelOptions.layout || "grid";
+                const layoutOptions = panelOptions.layoutOptions || {};
+                const position = panelOptions.position || BorderLayout.CENTER;
+                const parentId = panelOptions.parent;
+                const visible = panelOptions.visible !== false;
+
+                const panel = new JPanel();
+
+                // Extract number of columns if specified in layout string (e.g., "grid,2")
+                let cols = 1;
+                if (layoutType && layoutType.includes(",")) {
+                    const parts = layoutType.split(",");
+                    layoutType = parts[0];
+                    cols = parseInt(parts[1]) || 1;
+                }
+
+                if (layoutType === "border") {
+                    panel.setLayout(new BorderLayout(
+                        layoutOptions.hgap || 0,
+                        layoutOptions.vgap || 0
+                    ));
+                } else if (layoutType === "flow") {
+                    panel.setLayout(new FlowLayout(
+                        layoutOptions.align || FlowLayout.CENTER,
+                        layoutOptions.hgap || 5,
+                        layoutOptions.vgap || 5
+                    ));
+                } else if (layoutType === "grid") {
+                    panel.setLayout(new GridLayout(
+                        layoutOptions.rows || 1,
+                        layoutOptions.cols || cols,
+                        layoutOptions.hgap || 2,
+                        layoutOptions.vgap || 2
+                    ));
+                } else if (layoutType === "gridbag") {
+                    panel.setLayout(new GridBagLayout());
+                } else if (layoutType === "card") {
+                    panel.setLayout(new java.awt.CardLayout());
+                }
+
+                panel.setBackground(new Color(
+                    colorScheme.panelBackground.getRed(),
+                    colorScheme.panelBackground.getGreen(),
+                    colorScheme.panelBackground.getBlue(),
+                    colorScheme.panelBackground.getAlpha()
+                ));
+
+                if (panelTitle) {
+                    const titledBorder = BorderFactory.createTitledBorder(
+                        BorderFactory.createLineBorder(colorScheme.border, 1),
+                        panelTitle,
+                        TitledBorder.CENTER,
+                        TitledBorder.TOP,
+                        new Font("Dialog", Font.BOLD, 11),
+                        colorScheme.text
+                    );
+                    panel.setBorder(BorderFactory.createCompoundBorder(
+                        titledBorder,
+                        BorderFactory.createEmptyBorder(5, 5, 5, 5)
+                    ));
+                } else {
+                    panel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+                }
+
+                panel.setVisible(visible);
+
+                if (parentId && this.panels[parentId]) {
+                    this.panels[parentId].add(panel, position);
+                } else {
+                    this.contentPanel.add(panel, position);
+                }
+
+                this.panels[panelId] = panel;
+
+                return panel;
+            },
+
+            createLabel: function (labelOptions) {
+                const labelId = labelOptions.id;
+                const text = labelOptions.text || "";
+                const panelId = labelOptions.parent;
+                const position = labelOptions.position || "";
+                const color = labelOptions.color || colorScheme.text;
+                const align = labelOptions.align || SwingConstants.LEFT;
+
+                const label = new JLabel(text, align);
+                label.setForeground(color);
+
+                // Handle font options
+                if (labelOptions.font) {
+                    if (typeof labelOptions.font === 'string') {
+                        const fontParts = labelOptions.font.split(',');
+                        const fontStyle = fontParts[0] === 'bold' ? Font.BOLD : Font.PLAIN;
+                        const fontSize = fontParts.length > 1 ? parseInt(fontParts[1]) : 11;
+                        label.setFont(new Font("Dialog", fontStyle, fontSize));
+                    } else {
+                        const fontFamily = labelOptions.font.family || "Dialog";
+                        const fontStyle = labelOptions.font.style || Font.PLAIN;
+                        const fontSize = labelOptions.font.size || 11;
+                        label.setFont(new Font(fontFamily, fontStyle, fontSize));
+                    }
+                }
+
+                if (this.panels[panelId]) {
+                    if (this.panels[panelId].getLayout() instanceof BorderLayout) {
+                        this.panels[panelId].add(label, position);
+                    } else {
+                        this.panels[panelId].add(label);
+                    }
+                }
+
+                this.components[labelId] = label;
+
+                return label;
+            },
+
+            createButton: function (buttonOptions) {
+                const buttonId = buttonOptions.id;
+                const text = buttonOptions.text || "Button";
+                const panelId = buttonOptions.parent;
+                const position = buttonOptions.position || "";
+                const onClick = buttonOptions.onClick || function () { };
+
+                const button = new JButton(text);
+
+                const actionListener = Java.extend(ActionListener, {
+                    actionPerformed: function (e) {
+                        try {
+                            onClick(e);
+                        } catch (err) {
+                            console.error("Error in button click handler: " + err.message);
+                        }
+                    }
+                });
+                button.addActionListener(new actionListener());
+
+                if (this.panels[panelId]) {
+                    if (this.panels[panelId].getLayout() instanceof BorderLayout) {
+                        this.panels[panelId].add(button, position);
+                    } else {
+                        this.panels[panelId].add(button);
+                    }
+                }
+
+                this.components[buttonId] = button;
+
+                return button;
+            },
+
+            createTextField: function (textFieldOptions) {
+                const textFieldId = textFieldOptions.id;
+                const text = textFieldOptions.text || "";
+                const panelId = textFieldOptions.parent;
+                const columns = textFieldOptions.columns || 10;
+                const onChange = textFieldOptions.onChange || function () { };
+
+                const textField = new JTextField(text, columns);
+                textField.setForeground(colorScheme.text);
+                textField.setBackground(new Color(
+                    colorScheme.background.getRed(),
+                    colorScheme.background.getGreen(),
+                    colorScheme.background.getBlue(),
+                    230
+                ));
+
+                if (onChange) {
+                    const documentListener = Java.extend(javax.swing.event.DocumentListener, {
+                        insertUpdate: function(e) { onChange(textField.getText()); },
+                        removeUpdate: function(e) { onChange(textField.getText()); },
+                        changedUpdate: function(e) { onChange(textField.getText()); }
+                    });
+                    textField.getDocument().addDocumentListener(new documentListener());
+                }
+
+                if (this.panels[panelId]) {
+                    this.panels[panelId].add(textField);
+                }
+
+                this.components[textFieldId] = textField;
+
+                return textField;
+            },
+
+            createTable: function (tableOptions) {
+                const tableId = tableOptions.id;
+                const panelId = tableOptions.parent;
+                const headers = tableOptions.headers || [];
+                const rows = tableOptions.rows || [];
+                const editable = tableOptions.editable || false;
+                const sortable = tableOptions.sortable || false;
+                const selectable = tableOptions.selectable !== false;
+                const region = tableOptions.region || "";
+
+                // Create the table model
+                const tableModel = new DefaultTableModel(
+                    new Array(rows.length).fill(null).map((_, rowIndex) => 
+                        new Array(headers.length).fill(null).map((_, colIndex) => 
+                            rows[rowIndex] && rows[rowIndex][colIndex] ? rows[rowIndex][colIndex] : ""
+                        )
+                    ),
+                    headers
+                );
+                
+                // Create the table
+                const table = new JTable(tableModel);
+                table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+                
+                // Handle editability
+                table.setEnabled(true);
+                if (!editable) {
+                    const defaultTableModel = tableModel;
+                    defaultTableModel.isCellEditable = function() { return false; };
+                }
+                
+                // Handle selection
+                if (!selectable) {
+                    table.setRowSelectionAllowed(false);
+                    table.setCellSelectionEnabled(false);
+                } else {
+                    table.setRowSelectionAllowed(true);
+                    table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+                }
+                
+                // Handle sorting
+                if (sortable) {
+                    table.setAutoCreateRowSorter(true);
+                }
+                
+                // Customize appearance
+                table.setGridColor(new Color(colorScheme.border.getRGB()));
+                table.setBackground(new Color(
+                    colorScheme.background.getRed(),
+                    colorScheme.background.getGreen(),
+                    colorScheme.background.getBlue(),
+                    230
+                ));
+                table.setForeground(colorScheme.text);
+                
+                // Style the header
+                const tableHeader = table.getTableHeader();
+                tableHeader.setBackground(colorScheme.headerBackground);
+                tableHeader.setForeground(colorScheme.text);
+                
+                // Create scrollpane for the table
+                const scrollPane = new JScrollPane(table);
+                scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+                scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+                
+                // Add to parent panel
+                if (this.panels[panelId]) {
+                    if (this.panels[panelId].getLayout() instanceof BorderLayout) {
+                        this.panels[panelId].add(scrollPane, region);
+                    } else {
+                        this.panels[panelId].add(scrollPane);
+                    }
+                }
+                
+                // Store references
+                this.components[tableId] = table;
+                this.tableModels[tableId] = tableModel;
+                
+                return scrollPane;
+            },
+
+            updateTable: function (tableId, rows) {
+                const table = this.components[tableId];
+                const tableModel = this.tableModels[tableId];
+                
+                if (!table || !tableModel) {
+                    console.error("Table or model not found with ID: " + tableId);
+                    return;
+                }
+                
+                SwingUtilities.invokeLater(function () {
+                    try {
+                        // Clear existing data
+                        tableModel.setRowCount(0);
+                        
+                        // Add new rows
+                        rows.forEach(row => {
+                            tableModel.addRow(row);
+                        });
+                        
+                        // Refresh the table
+                        table.repaint();
+                    } catch (err) {
+                        console.error("Error updating table: " + err.message);
+                    }
+                });
+                
+                return this;
+            },
+
+            getSelectedRow: function (tableId) {
+                const table = this.components[tableId];
+                if (!table || !(table instanceof JTable)) {
+                    console.error("Table not found with ID: " + tableId);
+                    return -1;
+                }
+                
+                return table.getSelectedRow();
+            },
+
+            getComponent: function (id) {
+                return this.components[id] || null;
+            },
+
+            updateComponent: function (id, options) {
+                const component = this.components[id];
+                if (!component) return;
+
+                SwingUtilities.invokeLater(function () {
+                    try {
+                        if (options.text !== undefined && component.setText) {
+                            component.setText(String(options.text));
+                        }
+                        
+                        if (options.value !== undefined && component.setValue) {
+                            component.setValue(Number(options.value));
+                        }
+                        
+                        if (options.selected !== undefined && component.setSelected) {
+                            component.setSelected(Boolean(options.selected));
+                        }
+                        
+                        if (options.enabled !== undefined && component.setEnabled) {
+                            component.setEnabled(Boolean(options.enabled));
+                        }
+                        
+                        if (options.visible !== undefined && component.setVisible) {
+                            component.setVisible(Boolean(options.visible));
+                        }
+                    } catch (err) {
+                        console.error("Error updating component: " + err.message);
+                    }
+                });
+
+                return this;
+            }
+        };
+
+        this.windows[id] = dialogObj;
+
+        return dialogObj;
+    }
+
+    /**
+     * Shows a message dialog
+     * @param {string} message - Message to display
+     * @param {string} [title="Message"] - Dialog title
+     * @param {number} [messageType=JOptionPane.INFORMATION_MESSAGE] - Message type
+     */
+    static showMessageDialog(message, title = "Message", messageType = JOptionPane.INFORMATION_MESSAGE) {
+        SwingUtilities.invokeLater(function () {
+            JOptionPane.showMessageDialog(null, message, title, messageType);
+        });
+    }
+
+    /**
+     * Shows an error dialog
+     * @param {string} message - Error message to display
+     * @param {string} [title="Error"] - Dialog title
+     */
+    static showErrorDialog(message, title = "Error") {
+        this.showMessageDialog(message, title, JOptionPane.ERROR_MESSAGE);
+    }
+
+    /**
+     * Shows a confirmation dialog
+     * @param {string} message - Message to display
+     * @param {Function} [onYes] - Callback when Yes is clicked
+     * @param {Function} [onNo] - Callback when No is clicked
+     * @param {string} [title="Confirm"] - Dialog title
+     */
+    static showConfirmDialog(message, onYes, onNo, title = "Confirm") {
+        SwingUtilities.invokeLater(function () {
+            const result = JOptionPane.showConfirmDialog(
+                null,
+                message,
+                title,
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE
+            );
+            
+            if (result === JOptionPane.YES_OPTION && onYes) {
+                onYes();
+            } else if (result === JOptionPane.NO_OPTION && onNo) {
+                onNo();
+            }
+        });
+    }
+
+    /**
+     * Shows an input dialog
+     * @param {string} message - Message to display
+     * @param {Function} [callback] - Callback with the input value
+     * @param {string} [title="Input"] - Dialog title
+     * @param {string} [initialValue=""] - Initial input value
+     */
+    static showInputDialog(message, callback, title = "Input", initialValue = "") {
+        SwingUtilities.invokeLater(function () {
+            const result = JOptionPane.showInputDialog(
+                null,
+                message,
+                title,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                null,
+                initialValue
+            );
+            
+            if (callback) {
+                callback(result);
+            }
+        });
+    }
+
+    /**
+     * Formats date/time duration in a human-readable format
+     * @param {number} milliseconds - Duration in milliseconds
+     * @param {boolean} [short=false] - Whether to use short format
+     * @returns {string} Formatted duration
+     */
+    static formatDuration(milliseconds, short = false) {
+        if (milliseconds < 0) return short ? "0s" : "0 seconds";
+        
+        const seconds = Math.floor(milliseconds / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        
+        if (short) {
+            if (days > 0) return `${days}d ${hours % 24}h`;
+            if (hours > 0) return `${hours}h ${minutes % 60}m`;
+            if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+            return `${seconds}s`;
+        } else {
+            const parts = [];
+            
+            if (days > 0) parts.push(`${days} day${days !== 1 ? "s" : ""}`);
+            if (hours % 24 > 0) parts.push(`${hours % 24} hour${hours % 24 !== 1 ? "s" : ""}`);
+            if (minutes % 60 > 0) parts.push(`${minutes % 60} minute${minutes % 60 !== 1 ? "s" : ""}`);
+            if (seconds % 60 > 0) parts.push(`${seconds % 60} second${seconds % 60 !== 1 ? "s" : ""}`);
+            
+            return parts.join(", ");
+        }
     }
 
     /**
@@ -794,7 +1782,11 @@ class SwingUtils {
     static closeAll() {
         Object.values(this.windows).forEach(window => {
             try {
-                window.dispose();
+                if (window.dialog) {
+                    window.close();
+                } else {
+                    window.dispose();
+                }
             } catch (e) {
                 console.error("Error disposing window: " + e.message);
             }
@@ -835,16 +1827,16 @@ class SwingUtils {
         window.createButton({
             id: "clear-btn",
             text: "Clear Log",
-            panel: "controls",
+            parent: "controls",
             onClick: function () {
-                window.updateComponent("log-area", "");
+                window.updateComponent("log-area", { text: "" });
             }
         });
 
         window.createCheckbox({
             id: "auto-scroll",
             text: "Auto-scroll",
-            panel: "controls",
+            parent: "controls",
             selected: true
         });
 
@@ -857,7 +1849,7 @@ class SwingUtils {
 
         const logArea = window.createTextArea({
             id: "log-area",
-            panel: "log-panel",
+            parent: "log-panel",
             text: "",
             rows: 20,
             cols: 50,
@@ -874,7 +1866,7 @@ class SwingUtils {
         window.createLabel({
             id: "status-label",
             text: "Ready",
-            panel: "status-panel"
+            parent: "status-panel"
         });
 
         window.log = function (message, type = "INFO") {
@@ -892,7 +1884,7 @@ class SwingUtils {
                     logArea.setCaretPosition(logArea.getDocument().getLength());
                 }
 
-                window.updateComponent("status-label", `Last entry: ${timestamp}`);
+                window.updateComponent("status-label", { text: `Last entry: ${timestamp}` });
             });
 
             return window;
@@ -933,60 +1925,22 @@ class SwingUtils {
             resizable: true
         });
 
-        const headerPanel = window.createPanel({
-            id: "header-panel",
-            layout: "grid",
-            layoutOptions: { rows: 1, cols: columns.length },
-            position: BorderLayout.NORTH
+        window.createTable({
+            id: "data-table",
+            parent: window.contentPanel.getName(),
+            headers: columns.map(col => col.name),
+            rows: rows,
+            editable: false,
+            sortable: true,
+            region: BorderLayout.CENTER
         });
-
-        columns.forEach((column, index) => {
-            window.createLabel({
-                id: `header-${column.id}`,
-                text: column.name || `Column ${index + 1}`,
-                panel: "header-panel",
-                font: { family: "Dialog", style: Font.BOLD, size: 12 }
-            });
-        });
-
-        const dataPanel = window.createPanel({
-            id: "data-panel",
-            layout: "grid",
-            layoutOptions: { rows: Math.max(10, rows.length), cols: columns.length, vgap: 1 },
-            position: BorderLayout.CENTER
-        });
-
-        for (let rowIndex = 0; rowIndex < Math.max(10, rows.length); rowIndex++) {
-            const rowData = rows[rowIndex] || {};
-
-            columns.forEach((column, colIndex) => {
-                const cellId = `cell-${rowIndex}-${column.id}`;
-                const cellValue = rowData[column.id] || "";
-
-                window.createLabel({
-                    id: cellId,
-                    text: cellValue,
-                    panel: "data-panel"
-                });
-            });
-        }
 
         window.createTimer({
             interval: 1000,
             callback: function () {
                 try {
                     const updatedRows = updateCallback() || [];
-
-                    updatedRows.forEach((rowData, rowIndex) => {
-                        if (rowIndex >= Math.max(10, rows.length)) return;
-
-                        columns.forEach((column) => {
-                            const cellId = `cell-${rowIndex}-${column.id}`;
-                            const cellValue = rowData[column.id] || "";
-
-                            window.updateComponent(cellId, cellValue);
-                        });
-                    });
+                    window.updateTable("data-table", updatedRows);
                 } catch (err) {
                     console.error("Error updating data window: " + err.message);
                 }
