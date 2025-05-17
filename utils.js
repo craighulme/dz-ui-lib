@@ -1,4 +1,4 @@
-/*
+*
     QuackDuck Swing Utils for DeadZone.dev
 */
 
@@ -310,7 +310,6 @@ class SwingUtils {
 
                 const panel = new JPanel();
 
-                // Extract number of columns if specified in layout string (e.g., "grid,2")
                 let cols = 1;
                 if (layoutType && layoutType.includes(",")) {
                     const parts = layoutType.split(",");
@@ -404,7 +403,6 @@ class SwingUtils {
                 const label = new JLabel(text, align);
                 label.setForeground(color);
 
-                // Handle font options as either string or object
                 if (labelOptions.font) {
                     if (typeof labelOptions.font === 'string') {
                         const fontParts = labelOptions.font.split(',');
@@ -727,7 +725,6 @@ class SwingUtils {
                 if (paintLabels) {
                     slider.setPaintLabels(true);
 
-                    // Create custom labels if provided
                     if (sliderOptions.labels) {
                         const labelTable = new Hashtable();
                         for (const [value, label] of Object.entries(sliderOptions.labels)) {
@@ -807,11 +804,10 @@ class SwingUtils {
                 const selectable = tableOptions.selectable !== false;
                 const region = tableOptions.region || "";
 
-                // Create a custom table model if not editable
                 let tableModel;
 
                 if (!editable) {
-                    // Create a non-editable model by extending DefaultTableModel
+
                     const CustomTableModel = Java.extend(DefaultTableModel, {
                         isCellEditable: function () {
                             return false;
@@ -827,7 +823,7 @@ class SwingUtils {
                         headers
                     );
                 } else {
-                    // Use standard DefaultTableModel for editable tables
+
                     tableModel = new DefaultTableModel(
                         new Array(rows.length).fill(null).map((_, rowIndex) =>
                             new Array(headers.length).fill(null).map((_, colIndex) =>
@@ -838,14 +834,11 @@ class SwingUtils {
                     );
                 }
 
-                // Create the table
                 const table = new JTable(tableModel);
                 table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 
-                // Handle editability
                 table.setEnabled(true);
 
-                // Handle selection
                 if (!selectable) {
                     table.setRowSelectionAllowed(false);
                     table.setCellSelectionEnabled(false);
@@ -854,12 +847,10 @@ class SwingUtils {
                     table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
                 }
 
-                // Handle sorting
                 if (sortable) {
                     table.setAutoCreateRowSorter(true);
                 }
 
-                // Customize appearance
                 table.setGridColor(new Color(colorScheme.border.getRGB()));
                 table.setBackground(new Color(
                     colorScheme.background.getRed(),
@@ -869,24 +860,20 @@ class SwingUtils {
                 ));
                 table.setForeground(colorScheme.text);
 
-                // Style the header
                 const tableHeader = table.getTableHeader();
                 tableHeader.setBackground(colorScheme.headerBackground);
                 tableHeader.setForeground(colorScheme.text);
 
-                // Create scrollpane for the table
                 const scrollPane = new JScrollPane(table);
                 scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
                 scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 
-                // Add to parent panel
                 if (this.panels[panelId]) {
                     if (this.panels[panelId].getLayout() instanceof BorderLayout) {
-                        // Make sure we're using a valid BorderLayout constraint
+
                         const borderLayout = Java.type("java.awt.BorderLayout");
                         let constraint;
 
-                        // Map string position to BorderLayout constant
                         switch (region) {
                             case "CENTER":
                             case "center":
@@ -909,7 +896,7 @@ class SwingUtils {
                                 constraint = borderLayout.WEST;
                                 break;
                             default:
-                                // Default to CENTER if not recognized
+
                                 constraint = borderLayout.CENTER;
                         }
 
@@ -919,7 +906,6 @@ class SwingUtils {
                     }
                 }
 
-                // Store references
                 this.components[tableId] = table;
                 this.tableModels[tableId] = tableModel;
 
@@ -930,11 +916,11 @@ class SwingUtils {
              * Creates a tabbed pane in a panel
              * @param {Object} tabbedPaneOptions - Tabbed pane configuration
              * @param {string} tabbedPaneOptions.id - Unique identifier for the tabbed pane
-             * @param {string} tabbedPaneOptions.parent - Parent panel ID
+             * @param {string} [tabbedPaneOptions.parent] - Parent panel ID, defaults to contentPanel
              * @param {Array<Object>} [tabbedPaneOptions.tabs=[]] - Initial tabs [{title, content}]
-             * @param {Function} [tabbedPaneOptions.onTabChange] - Tab change event handler
+             * @param {Function} [tabbedPaneOptions.onTabChange] - Tab change event handler (receives ui, index, title)
              * @param {string} [tabbedPaneOptions.tabPlacement="top"] - Tab placement (top, bottom, left, right)
-             * @param {string} [tabbedPaneOptions.region=""] - Region for BorderLayout
+             * @param {string} [tabbedPaneOptions.position="center"] - Position for BorderLayout
              * @returns {JTabbedPane} Created tabbed pane
              */
             createTabbedPane: function (tabbedPaneOptions) {
@@ -942,84 +928,63 @@ class SwingUtils {
                 const panelId = tabbedPaneOptions.parent;
                 const tabs = tabbedPaneOptions.tabs || [];
                 const onTabChange = tabbedPaneOptions.onTabChange || function () { };
-                const region = tabbedPaneOptions.region || BorderLayout.CENTER; // Default to CENTER
+                const tabPlacement = this.parseTabPlacement(tabbedPaneOptions.tabPlacement || "top");
+                const position = tabbedPaneOptions.position || BorderLayout.CENTER;
 
-                // Create the tabbed pane with a hardcoded value
-                const tabbedPane = new JTabbedPane(1); // TOP = 1
+                const tabbedPane = new JTabbedPane();
+                tabbedPane.setTabPlacement(tabPlacement !== undefined ? tabPlacement : 1); 
+                tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+                tabbedPane.setPreferredSize(new java.awt.Dimension(400, 300));
 
-                // Add initial tabs if provided
+                const ui = this;
+
                 if (Array.isArray(tabs)) {
                     tabs.forEach(tab => {
                         if (tab && typeof tab === 'object') {
                             const panel = new JPanel(new BorderLayout());
-                            panel.setBackground(colorScheme.panelBackground);
-
+                            panel.setBackground(this.colorScheme.panelBackground);
+                            panel.setPreferredSize(new java.awt.Dimension(400, 300)); 
                             if (tab.content) {
                                 panel.add(tab.content, BorderLayout.CENTER);
                             }
-
                             tabbedPane.addTab(tab.title || "Tab", panel);
                         }
                     });
                 }
 
-                // Add change listener
                 const changeListener = Java.extend(ChangeListener, {
                     stateChanged: function (e) {
-                        try {
-                            if (tabbedPane.getSelectedIndex() >= 0) {
-                                onTabChange(tabbedPane.getSelectedIndex(), tabbedPane.getTitleAt(tabbedPane.getSelectedIndex()));
-                            }
-                        } catch (err) {
-                            console.error("Error in tabbed pane change handler: " + err.message);
+                        const index = tabbedPane.getSelectedIndex();
+                        if (index >= 0) {
+                            onTabChange(ui, index, tabbedPane.getTitleAt(index));
                         }
                     }
                 });
                 tabbedPane.addChangeListener(new changeListener());
 
-                // Add to parent panel
-                if (this.panels[panelId]) {
-                    if (this.panels[panelId].getLayout() instanceof BorderLayout) {
-                        // Make sure we're using a valid BorderLayout constraint
-                        const borderLayout = Java.type("java.awt.BorderLayout");
-                        let constraint;
-
-                        // Map string position to BorderLayout constant
-                        switch (region) {
-                            case "CENTER":
-                            case "center":
-                                constraint = borderLayout.CENTER;
-                                break;
-                            case "NORTH":
-                            case "north":
-                                constraint = borderLayout.NORTH;
-                                break;
-                            case "SOUTH":
-                            case "south":
-                                constraint = borderLayout.SOUTH;
-                                break;
-                            case "EAST":
-                            case "east":
-                                constraint = borderLayout.EAST;
-                                break;
-                            case "WEST":
-                            case "west":
-                                constraint = borderLayout.WEST;
-                                break;
-                            default:
-                                // Default to CENTER if not recognized
-                                constraint = borderLayout.CENTER;
-                        }
-
-                        this.panels[panelId].add(tabbedPane, constraint);
-                    } else {
-                        this.panels[panelId].add(tabbedPane);
-                    }
-                }
+                const parentPanel = panelId && this.panels[panelId] ? this.panels[panelId] : this.contentPanel;
+                parentPanel.add(tabbedPane, position);
+                parentPanel.revalidate();
+                parentPanel.repaint();
 
                 this.components[tabbedPaneId] = tabbedPane;
-
                 return tabbedPane;
+            },
+
+            /**
+             * Helper to parse tab placement string to JTabbedPane constant
+             * @param {string} placement - "top", "bottom", "left", "right"
+             * @returns {number} JTabbedPane placement constant
+             */
+            parseTabPlacement: function (placement) {
+                if (!placement) return JTabbedPane.TOP; 
+                switch (placement.toLowerCase()) {
+                    case "bottom": return JTabbedPane.BOTTOM;
+                    case "left": return JTabbedPane.LEFT;
+                    case "right": return JTabbedPane.RIGHT;
+                    case "top":
+                    default: return JTabbedPane.TOP;
+                }
             },
 
             /**
@@ -1037,20 +1002,14 @@ class SwingUtils {
                     return -1;
                 }
 
-                const panel = new JPanel(new BorderLayout());
-                panel.setBackground(colorScheme.panelBackground);
+                tabbedPane.addTab(title, content);
 
-                if (content) {
-                    panel.add(content, BorderLayout.CENTER);
-                }
-
-                tabbedPane.addTab(title, panel);
-
+                const newIndex = tabbedPane.getTabCount() - 1;
                 if (select) {
-                    tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
+                    tabbedPane.setSelectedIndex(newIndex);
                 }
 
-                return tabbedPane.getTabCount() - 1;
+                return newIndex;
             },
 
             /**
@@ -1084,15 +1043,13 @@ class SwingUtils {
 
                 SwingUtilities.invokeLater(function () {
                     try {
-                        // Clear existing data
+
                         tableModel.setRowCount(0);
 
-                        // Add new rows
                         rows.forEach(row => {
                             tableModel.addRow(row);
                         });
 
-                        // Refresh the table
                         table.repaint();
                     } catch (err) {
                         console.error("Error updating table: " + err.message);
@@ -1307,7 +1264,6 @@ class SwingUtils {
         const resizable = options.resizable || false;
         const onClose = options.onClose || function () { };
 
-        // Create a parent frame if none exists (needed for modality)
         let parentFrame = null;
         if (modal) {
             for (const windowId in this.windows) {
@@ -1325,7 +1281,7 @@ class SwingUtils {
 
         const dialog = new JDialog(parentFrame, title, modal);
         dialog.setUndecorated(false);
-        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+
         dialog.setResizable(resizable);
 
         const mainPanel = new JPanel();
@@ -1344,15 +1300,22 @@ class SwingUtils {
         dialog.setSize(width, height);
         dialog.setLocationRelativeTo(null);
 
-        dialog.addWindowListener(new Java.extend(java.awt.event.WindowAdapter, {
-            windowClosing: function (e) {
-                try {
-                    onClose();
-                } catch (err) {
-                    console.error("Error in dialog close handler: " + err.message);
+        try {
+            const WindowAdapter = Java.type("java.awt.event.WindowAdapter");
+            const windowAdapter = Java.extend(WindowAdapter);
+            const listener = new windowAdapter({
+                windowClosing: function (e) {
+                    try {
+                        onClose();
+                    } catch (err) {
+                        console.error(`Error in dialog close handler: " + ${err.message}`);
+                    }
                 }
-            }
-        }));
+            });
+            dialog.addWindowListener(listener);
+        } catch (e) {
+            Utility.print(`Error creating WindowAdapter:  + ${e}`);
+        }
 
         const dialogObj = {
             id,
@@ -1394,7 +1357,19 @@ class SwingUtils {
                 return this;
             },
 
-            // Implementation of all the same methods as window
+            /**
+             * Creates a panel in the window's content area
+             * @param {Object} panelOptions - Panel configuration
+             * @param {string} panelOptions.id - Unique identifier for the panel
+             * @param {string} [panelOptions.title] - Optional title for the panel
+             * @param {string} [panelOptions.layout="grid"] - Layout type: "border", "flow", "grid", "gridbag", "card"
+             * @param {Object} [panelOptions.layoutOptions] - Layout-specific options
+             * @param {string} [panelOptions.position="center"] - Position in parent (for BorderLayout)
+             * @param {string} [panelOptions.parent] - Parent panel ID or null for main content
+             * @param {boolean} [panelOptions.visible=true] - Whether the panel is initially visible
+             * @param {boolean} [panelOptions.addToParent=true] - Whether to automatically add the panel to its parent
+             * @returns {JPanel} Created panel
+             */
             createPanel: function (panelOptions) {
                 const panelId = panelOptions.id;
                 const panelTitle = panelOptions.title;
@@ -1403,10 +1378,10 @@ class SwingUtils {
                 const position = panelOptions.position || BorderLayout.CENTER;
                 const parentId = panelOptions.parent;
                 const visible = panelOptions.visible !== false;
+                const addToParent = panelOptions.addToParent !== false; 
 
                 const panel = new JPanel();
 
-                // Extract number of columns if specified in layout string (e.g., "grid,2")
                 let cols = 1;
                 if (layoutType && layoutType.includes(",")) {
                     const parts = layoutType.split(",");
@@ -1439,20 +1414,20 @@ class SwingUtils {
                 }
 
                 panel.setBackground(new Color(
-                    colorScheme.panelBackground.getRed(),
-                    colorScheme.panelBackground.getGreen(),
-                    colorScheme.panelBackground.getBlue(),
-                    colorScheme.panelBackground.getAlpha()
+                    this.colorScheme.panelBackground.getRed(),
+                    this.colorScheme.panelBackground.getGreen(),
+                    this.colorScheme.panelBackground.getBlue(),
+                    this.colorScheme.panelBackground.getAlpha()
                 ));
 
                 if (panelTitle) {
                     const titledBorder = BorderFactory.createTitledBorder(
-                        BorderFactory.createLineBorder(colorScheme.border, 1),
+                        BorderFactory.createLineBorder(this.colorScheme.border, 1),
                         panelTitle,
                         TitledBorder.CENTER,
                         TitledBorder.TOP,
                         new Font("Dialog", Font.BOLD, 11),
-                        colorScheme.text
+                        this.colorScheme.text
                     );
                     panel.setBorder(BorderFactory.createCompoundBorder(
                         titledBorder,
@@ -1464,10 +1439,12 @@ class SwingUtils {
 
                 panel.setVisible(visible);
 
-                if (parentId && this.panels[parentId]) {
-                    this.panels[parentId].add(panel, position);
-                } else {
-                    this.contentPanel.add(panel, position);
+                if (addToParent) {
+                    if (parentId && this.panels[parentId]) {
+                        this.panels[parentId].add(panel, position);
+                    } else {
+                        this.contentPanel.add(panel, position);
+                    }
                 }
 
                 this.panels[panelId] = panel;
@@ -1486,7 +1463,6 @@ class SwingUtils {
                 const label = new JLabel(text, align);
                 label.setForeground(color);
 
-                // Handle font options
                 if (labelOptions.font) {
                     if (typeof labelOptions.font === 'string') {
                         const fontParts = labelOptions.font.split(',');
@@ -1591,7 +1567,6 @@ class SwingUtils {
                 const selectable = tableOptions.selectable !== false;
                 const region = tableOptions.region || "";
 
-                // Create the table model
                 const tableModel = new DefaultTableModel(
                     new Array(rows.length).fill(null).map((_, rowIndex) =>
                         new Array(headers.length).fill(null).map((_, colIndex) =>
@@ -1601,18 +1576,16 @@ class SwingUtils {
                     headers
                 );
 
-                // Create the table
                 const table = new JTable(tableModel);
                 table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+                table.setPreferredScrollableViewportSize(new java.awt.Dimension(300, 150));
 
-                // Handle editability
                 table.setEnabled(true);
                 if (!editable) {
                     const defaultTableModel = tableModel;
                     defaultTableModel.isCellEditable = function () { return false; };
                 }
 
-                // Handle selection
                 if (!selectable) {
                     table.setRowSelectionAllowed(false);
                     table.setCellSelectionEnabled(false);
@@ -1621,12 +1594,10 @@ class SwingUtils {
                     table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
                 }
 
-                // Handle sorting
                 if (sortable) {
                     table.setAutoCreateRowSorter(true);
                 }
 
-                // Customize appearance
                 table.setGridColor(new Color(colorScheme.border.getRGB()));
                 table.setBackground(new Color(
                     colorScheme.background.getRed(),
@@ -1636,17 +1607,14 @@ class SwingUtils {
                 ));
                 table.setForeground(colorScheme.text);
 
-                // Style the header
                 const tableHeader = table.getTableHeader();
                 tableHeader.setBackground(colorScheme.headerBackground);
                 tableHeader.setForeground(colorScheme.text);
 
-                // Create scrollpane for the table
                 const scrollPane = new JScrollPane(table);
                 scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
                 scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 
-                // Add to parent panel
                 if (this.panels[panelId]) {
                     if (this.panels[panelId].getLayout() instanceof BorderLayout) {
                         this.panels[panelId].add(scrollPane, region);
@@ -1655,7 +1623,6 @@ class SwingUtils {
                     }
                 }
 
-                // Store references
                 this.components[tableId] = table;
                 this.tableModels[tableId] = tableModel;
 
@@ -1673,15 +1640,13 @@ class SwingUtils {
 
                 SwingUtilities.invokeLater(function () {
                     try {
-                        // Clear existing data
+
                         tableModel.setRowCount(0);
 
-                        // Add new rows
                         rows.forEach(row => {
                             tableModel.addRow(row);
                         });
 
-                        // Refresh the table
                         table.repaint();
                     } catch (err) {
                         console.error("Error updating table: " + err.message);
@@ -2032,9 +1997,8 @@ class SwingUtils {
     }
 }
 
-// Store all created windows for management
 SwingUtils.windows = {};
-// Color Schemes
+
 SwingUtils.ColorSchemes = {
     DARK: {
         background: new Color(30, 30, 30, 180),
@@ -2067,5 +2031,53 @@ SwingUtils.ColorSchemes = {
         accent: new Color(100, 100, 180),
         text: Color.WHITE,
         border: new Color(60, 60, 100)
+    },
+    TWILIGHT: {
+        background: new Color(45, 45, 60, 180),
+        headerBackground: new Color(55, 55, 70, 220),
+        panelBackground: new Color(50, 50, 65, 200),
+        accent: new Color(140, 100, 180),
+        text: new Color(230, 230, 250),
+        border: new Color(80, 80, 100)
+    },
+    OCEAN: {
+        background: new Color(10, 40, 60, 180),
+        headerBackground: new Color(20, 50, 70, 220),
+        panelBackground: new Color(15, 45, 65, 200),
+        accent: new Color(0, 150, 200),
+        text: new Color(200, 240, 255),
+        border: new Color(40, 80, 100)
+    },
+    EMBER: {
+        background: new Color(50, 30, 30, 180),
+        headerBackground: new Color(60, 40, 40, 220),
+        panelBackground: new Color(55, 35, 35, 200),
+        accent: new Color(200, 80, 60),
+        text: new Color(255, 230, 220),
+        border: new Color(100, 60, 60)
+    },
+    FOREST: {
+        background: new Color(30, 45, 30, 180),
+        headerBackground: new Color(40, 60, 40, 220),
+        panelBackground: new Color(35, 50, 35, 200),
+        accent: new Color(60, 160, 60),
+        text: new Color(220, 255, 220),
+        border: new Color(60, 100, 60)
+    },
+    STEALTH: {
+        background: new Color(15, 15, 15, 200),
+        headerBackground: new Color(20, 20, 20, 220),
+        panelBackground: new Color(18, 18, 18, 200),
+        accent: new Color(100, 100, 100),
+        text: new Color(220, 220, 220),
+        border: new Color(50, 50, 50)
+    },
+    GOLD: {
+        background: new Color(40, 35, 25, 180),
+        headerBackground: new Color(50, 45, 30, 220),
+        panelBackground: new Color(45, 40, 28, 200),
+        accent: new Color(200, 170, 60),
+        text: new Color(255, 245, 220),
+        border: new Color(100, 90, 60)
     }
 };
